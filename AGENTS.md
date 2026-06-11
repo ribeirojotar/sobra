@@ -29,3 +29,5 @@ Next.js (App Router, TypeScript) · Supabase (Postgres + Auth + RLS) · Tailwind
 ## Convenções
 - Server Components pra leitura; Server Actions pra mutação; 'use client' só onde há interação.
 - revalidatePath após mutação. Mobile-first.
+## Decisões de produto
+- Recorrência (pensão, prestação, fixas): v1 é MANUAL — usuário registra/confirma cada pagamento; a projeção usa parcela_min (dívidas) e recurring_expenses (fixas) pra prever os meses futuros, sem criar lançamentos. "Contas do mês" com auto-sugestão fica pra depois do núcleo.
