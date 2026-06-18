@@ -26,6 +26,34 @@ export type DistributionRule = {
   created_at: string
 }
 
+export type Titular = {
+  id: string
+  nome: string
+  descricao: string | null
+  created_at: string
+}
+
+export type Debt = {
+  id: string
+  titular_id: string | null
+  credor: string
+  descricao: string | null
+  valor_original: number
+  valor_atual: number
+  valor_acordado: number | null
+  juros_mensal: number
+  parcela_min: number
+  status: 'a_negociar' | 'negociado' | 'acordo_em_dia' | 'atrasado' | 'acumulando' | 'quitada'
+  desconta_em_folha: boolean
+  elegivel_desenrola: boolean
+  contratada_em: string | null
+  atraso_dias: number | null
+  quitada: boolean
+  ordem: number
+  created_at: string
+  titulares: { nome: string } | null
+}
+
 export type TransactionRow = {
   id: string
   data: string
