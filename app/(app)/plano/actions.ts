@@ -5,7 +5,8 @@ import { revalidatePath } from 'next/cache'
 
 export type SaveResult = { ok: true } | { ok: false; error: string } | null
 
-/** Create (no id) or rename/recolor/re-meta (with id hidden field). */
+// ─── Envelopes ───────────────────────────────────────────────────────────────
+
 export async function saveEnvelope(
   _prev: SaveResult,
   formData: FormData,
@@ -22,20 +23,14 @@ export async function saveEnvelope(
   const supabase = await createClient()
 
   if (id) {
-    // Edit: only nome, cor, meta are mutable (saldo never updated here)
     const { error } = await supabase
       .from('envelopes')
       .update({ nome, cor, meta })
       .eq('id', id)
-
     if (error) return { ok: false, error: error.message }
   } else {
-    // Create
     const tipo = (formData.get('tipo') as string | null) || 'custom'
-    const { error } = await supabase
-      .from('envelopes')
-      .insert({ nome, tipo, cor, meta })
-
+    const { error } = await supabase.from('envelopes').insert({ nome, tipo, cor, meta })
     if (error) return { ok: false, error: error.message }
   }
 
@@ -43,13 +38,142 @@ export async function saveEnvelope(
   return { ok: true }
 }
 
-/** Toggle ativo/inativo. Saldo is untouched. */
 export async function toggleAtivo(formData: FormData): Promise<void> {
   const id = formData.get('id') as string
   const ativo = formData.get('ativo') === 'true'
-
   const supabase = await createClient()
   await supabase.from('envelopes').update({ ativo: !ativo }).eq('id', id)
+  revalidatePath('/plano')
+}
+
+// ─── Rendas (income_sources) ──────────────────────────────────────────────────
+
+export async function saveRenda(
+  _prev: SaveResult,
+  formData: FormData,
+): Promise<SaveResult> {
+  const id = (formData.get('id') as string | null) || null
+  const nome = (formData.get('nome') as string | null)?.trim()
+  const tipo = (formData.get('tipo') as string | null) || 'variavel'
+  const valorRaw = (formData.get('valor_estimado') as string | null)?.replace(',', '.').trim()
+  const valor_estimado = valorRaw ? Number(valorRaw) : 0
+  const diaRaw = (formData.get('dia_recebimento') as string | null)?.trim()
+  const dia_recebimento = diaRaw ? Number(diaRaw) : null
+
+  if (!nome) return { ok: false, error: 'Nome é obrigatório.' }
+  if (isNaN(valor_estimado) || valor_estimado < 0)
+    return { ok: false, error: 'Valor inválido.' }
+  if (dia_recebimento !== null && (isNaN(dia_recebimento) || dia_recebimento < 1 || dia_recebimento > 31))
+    return { ok: false, error: 'Dia inválido (1–31).' }
+
+  const supabase = await createClient()
+
+  if (id) {
+    const { error } = await supabase
+      .from('income_sources')
+      .update({ nome, tipo, valor_estimado, dia_recebimento })
+      .eq('id', id)
+    if (error) return { ok: false, error: error.message }
+  } else {
+    const { error } = await supabase
+      .from('income_sources')
+      .insert({ nome, tipo, valor_estimado, dia_recebimento })
+    if (error) return { ok: false, error: error.message }
+  }
 
   revalidatePath('/plano')
+  return { ok: true }
+}
+
+export async function toggleAtivoRenda(formData: FormData): Promise<void> {
+  const id = formData.get('id') as string
+  const ativo = formData.get('ativo') === 'true'
+  const supabase = await createClient()
+  await supabase.from('income_sources').update({ ativo: !ativo }).eq('id', id)
+  revalidatePath('/plano')
+}
+
+// ─── Despesas Fixas (recurring_expenses) ─────────────────────────────────────
+
+export async function saveFixa(
+  _prev: SaveResult,
+  formData: FormData,
+): Promise<SaveResult> {
+  const id = (formData.get('id') as string | null) || null
+  const nome = (formData.get('nome') as string | null)?.trim()
+  const valorRaw = (formData.get('valor') as string | null)?.replace(',', '.').trim()
+  const valor = valorRaw ? Number(valorRaw) : null
+  const diaRaw = (formData.get('dia_vencimento') as string | null)?.trim()
+  const dia_vencimento = diaRaw ? Number(diaRaw) : null
+
+  if (!nome) return { ok: false, error: 'Nome é obrigatório.' }
+  if (!valor || isNaN(valor) || valor <= 0) return { ok: false, error: 'Valor inválido.' }
+  if (dia_vencimento !== null && (isNaN(dia_vencimento) || dia_vencimento < 1 || dia_vencimento > 31))
+    return { ok: false, error: 'Dia inválido (1–31).' }
+
+  const supabase = await createClient()
+
+  if (id) {
+    const { error } = await supabase
+      .from('recurring_expenses')
+      .update({ nome, valor, dia_vencimento })
+      .eq('id', id)
+    if (error) return { ok: false, error: error.message }
+  } else {
+    const { error } = await supabase
+      .from('recurring_expenses')
+      .insert({ nome, valor, dia_vencimento })
+    if (error) return { ok: false, error: error.message }
+  }
+
+  revalidatePath('/plano')
+  return { ok: true }
+}
+
+export async function toggleAtivoFixa(formData: FormData): Promise<void> {
+  const id = formData.get('id') as string
+  const ativo = formData.get('ativo') === 'true'
+  const supabase = await createClient()
+  await supabase.from('recurring_expenses').update({ ativo: !ativo }).eq('id', id)
+  revalidatePath('/plano')
+}
+
+// ─── Exportar JSON ────────────────────────────────────────────────────────────
+
+export async function exportarDados(): Promise<
+  { ok: true; data: object } | { ok: false; error: string }
+> {
+  const supabase = await createClient()
+
+  const [
+    { data: envelopes, error: e1 },
+    { data: debts, error: e2 },
+    { data: transactions, error: e3 },
+    { data: income_sources, error: e4 },
+    { data: recurring_expenses, error: e5 },
+    { data: titulares, error: e6 },
+  ] = await Promise.all([
+    supabase.from('envelopes').select('*').order('ordem'),
+    supabase.from('debts').select('*').order('ordem'),
+    supabase.from('transactions').select('*').order('data', { ascending: false }),
+    supabase.from('income_sources').select('*').order('created_at'),
+    supabase.from('recurring_expenses').select('*').order('created_at'),
+    supabase.from('titulares').select('*').order('nome'),
+  ])
+
+  const err = e1 ?? e2 ?? e3 ?? e4 ?? e5 ?? e6
+  if (err) return { ok: false, error: err.message }
+
+  return {
+    ok: true,
+    data: {
+      exportedAt: new Date().toISOString(),
+      envelopes,
+      titulares,
+      debts,
+      income_sources,
+      recurring_expenses,
+      transactions,
+    },
+  }
 }

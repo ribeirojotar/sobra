@@ -54,6 +54,28 @@ export type Debt = {
   titulares: { nome: string } | null
 }
 
+export type IncomeSource = {
+  id: string
+  nome: string
+  tipo: 'fixa' | 'variavel'
+  valor_estimado: number
+  dia_recebimento: number | null
+  distribution_rule_id: string | null
+  ativo: boolean
+  created_at: string
+}
+
+export type RecurringExpense = {
+  id: string
+  nome: string
+  valor: number
+  dia_vencimento: number | null
+  category_id: string | null
+  envelope_id: string | null
+  ativo: boolean
+  created_at: string
+}
+
 export type TransactionRow = {
   id: string
   data: string
