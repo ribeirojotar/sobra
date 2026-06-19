@@ -35,3 +35,5 @@ Next.js (App Router, TypeScript) · Supabase (Postgres + Auth + RLS) · Tailwind
 - Dívidas: mostrar histórico de pagamentos dentro do card da dívida.
 - Dívidas: avisar (suave) quando o pagamento exceder o saldo da caixinha Dívidas.
 - Dívidas/Simulador: mensagem "Não quita (>50 anos)" terminar com "— aumente o aporte ou negocie a dívida" (acionável).
+- Plano/Export: incluir categorias, distribution_rules e debt_negotiations no JSON pra backup completo.
+Módulo Cartão: ver PRD-sobra-adendo-cartao.md (modelo pragmático, aba própria)." Assim o agente constrói a UI já alinhado.
