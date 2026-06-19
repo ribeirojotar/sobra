@@ -7,6 +7,7 @@ import { DividaSheet } from './DividaSheet'
 import { PagarSheet } from './PagarSheet'
 import { NegociarSheet } from './NegociarSheet'
 import { TitularSheet } from './TitularSheet'
+import { SimuladorCard } from './SimuladorCard'
 
 type SortMode = 'avalanche' | 'bola_de_neve'
 
@@ -117,6 +118,11 @@ export function DividasList({ debts, titulares, envelopes, dividasEnvelope }: Pr
             Cadastrar dívida
           </button>
         </div>
+      )}
+
+      {/* Simulador */}
+      {active.length > 0 && (
+        <SimuladorCard debts={active} sortMode={sortMode} />
       )}
 
       {/* Sort toggle */}

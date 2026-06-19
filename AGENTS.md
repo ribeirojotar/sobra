@@ -34,3 +34,4 @@ Next.js (App Router, TypeScript) · Supabase (Postgres + Auth + RLS) · Tailwind
 ## Pendências de polimento
 - Dívidas: mostrar histórico de pagamentos dentro do card da dívida.
 - Dívidas: avisar (suave) quando o pagamento exceder o saldo da caixinha Dívidas.
+- Dívidas/Simulador: mensagem "Não quita (>50 anos)" terminar com "— aumente o aporte ou negocie a dívida" (acionável).
