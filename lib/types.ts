@@ -76,6 +76,24 @@ export type RecurringExpense = {
   created_at: string
 }
 
+export type Card = {
+  id: string
+  nome: string
+  limite: number
+  dia_fechamento: number | null
+  dia_vencimento: number | null
+  juros_rotativo: number
+  cor: string | null
+  ordem: number
+  ativo: boolean
+  created_at: string
+}
+
+export type CardWithStats = Card & {
+  fatura_aberta: number
+  limite_usado: number
+}
+
 export type TransactionRow = {
   id: string
   data: string
