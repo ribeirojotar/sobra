@@ -138,6 +138,44 @@ export async function toggleAtivoFixa(formData: FormData): Promise<void> {
   revalidatePath('/plano')
 }
 
+// ─── Categorias ──────────────────────────────────────────────────────────────
+
+export async function editarCategoria(
+  _prev: SaveResult,
+  formData: FormData,
+): Promise<SaveResult> {
+  const id = (formData.get('id') as string | null) || null
+  const nome = (formData.get('nome') as string | null)?.trim()
+  const emoji = (formData.get('emoji') as string | null)?.trim() || null
+
+  if (!id) return { ok: false, error: 'ID inválido.' }
+  if (!nome) return { ok: false, error: 'Nome é obrigatório.' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('categories').update({ nome, emoji }).eq('id', id)
+
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/plano')
+  revalidatePath('/lancar')
+  return { ok: true }
+}
+
+export async function deletarCategoria(id: string): Promise<SaveResult> {
+  if (!id) return { ok: false, error: 'ID inválido.' }
+
+  const supabase = await createClient()
+  const { error } = await supabase.from('categories').delete().eq('id', id)
+
+  if (error) {
+    if (error.code === '23503')
+      return { ok: false, error: 'Esta categoria tem lançamentos — remova-os primeiro.' }
+    return { ok: false, error: error.message }
+  }
+  revalidatePath('/plano')
+  revalidatePath('/lancar')
+  return { ok: true }
+}
+
 // ─── Exportar JSON ────────────────────────────────────────────────────────────
 
 export async function exportarDados(): Promise<

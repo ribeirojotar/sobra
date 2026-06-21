@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { createClient } from '@/lib/supabase/server'
-import type { Category, DistributionRule, Envelope, TransactionRow } from '@/lib/types'
+import type { Card, CardPurchaseRow, Category, DistributionRule, Envelope, TransactionRow } from '@/lib/types'
 import { LancarForm } from './_components/LancarForm'
 import { TransacoesList } from './_components/TransacoesList'
 
@@ -18,6 +18,8 @@ export default async function LancarPage() {
     { data: categories },
     { data: rules },
     { data: transactions },
+    { data: cards },
+    { data: cardPurchases },
   ] = await Promise.all([
     supabase
       .from('envelopes')
@@ -38,6 +40,17 @@ export default async function LancarPage() {
       .lte('data', lastDay)
       .order('data', { ascending: false })
       .order('created_at', { ascending: false }),
+    supabase
+      .from('cards')
+      .select('id, nome, limite, dia_fechamento, dia_vencimento, juros_rotativo, cor, ordem, ativo, created_at')
+      .eq('ativo', true)
+      .order('ordem'),
+    supabase
+      .from('card_purchases')
+      .select('id, card_id, descricao, category_id, valor_total, parcelas, data_compra, created_at, cards(nome, cor), categories(nome, emoji), card_installments(numero, competencia)')
+      .gte('data_compra', firstDay)
+      .lte('data_compra', lastDay)
+      .order('created_at', { ascending: false }),
   ])
 
   return (
@@ -47,9 +60,11 @@ export default async function LancarPage() {
         envelopes={(envelopes ?? []) as Envelope[]}
         categories={(categories ?? []) as Category[]}
         rules={(rules ?? []) as DistributionRule[]}
+        cards={(cards ?? []) as Card[]}
       />
       <TransacoesList
         transactions={(transactions ?? []) as unknown as TransactionRow[]}
+        cardPurchases={(cardPurchases ?? []) as unknown as CardPurchaseRow[]}
         envelopes={(envelopes ?? []) as Envelope[]}
         categories={(categories ?? []) as Category[]}
       />

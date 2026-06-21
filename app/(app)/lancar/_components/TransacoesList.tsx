@@ -1,19 +1,24 @@
 'use client'
 
 import { useState, useTransition, useEffect } from 'react'
-import type { Category, Envelope, TransactionRow } from '@/lib/types'
+import type { CardPurchaseRow, Category, Envelope, TransactionRow } from '@/lib/types'
 import { brl } from '@/lib/format'
-import { deletarTransacao, editarTransacao } from '../actions'
+import { deletarTransacao, editarTransacao, cancelarCompraCartao } from '../actions'
 
 const FORMAS_PGTO = ['Pix', 'Dinheiro', 'Débito', 'Crédito']
 
 type ListProps = {
   transactions: TransactionRow[]
+  cardPurchases: CardPurchaseRow[]
   envelopes: Envelope[]
   categories: Category[]
 }
 
-export function TransacoesList({ transactions, envelopes, categories }: ListProps) {
+type ListEntry =
+  | { kind: 'tx'; item: TransactionRow; sortKey: string }
+  | { kind: 'cp'; item: CardPurchaseRow; sortKey: string }
+
+export function TransacoesList({ transactions, cardPurchases, envelopes, categories }: ListProps) {
   const [editTarget, setEditTarget] = useState<TransactionRow | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -30,6 +35,22 @@ export function TransacoesList({ transactions, envelopes, categories }: ListProp
     })
   }
 
+  function handleCancelPurchase(id: string) {
+    if (!confirm('Cancelar esta compra no crédito? As parcelas em aberto serão removidas.')) return
+    setDeletingId(id)
+    setDeleteError(null)
+    startTransition(async () => {
+      const result = await cancelarCompraCartao(id)
+      setDeletingId(null)
+      if (!result.ok) setDeleteError(result.error)
+    })
+  }
+
+  const combined: ListEntry[] = [
+    ...transactions.map((tx) => ({ kind: 'tx' as const, item: tx, sortKey: tx.created_at })),
+    ...cardPurchases.map((cp) => ({ kind: 'cp' as const, item: cp, sortKey: cp.created_at })),
+  ].sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+
   const now = new Date()
   const mes = now.toLocaleString('pt-BR', { month: 'long', year: 'numeric' })
 
@@ -45,21 +66,30 @@ export function TransacoesList({ transactions, envelopes, categories }: ListProp
         </p>
       )}
 
-      {transactions.length === 0 ? (
+      {combined.length === 0 ? (
         <p className="py-10 text-center text-sm text-zinc-400">
           Nenhum lançamento este mês. Registre o primeiro acima!
         </p>
       ) : (
         <ul className="flex flex-col gap-2">
-          {transactions.map((tx) => (
-            <TransactionItem
-              key={tx.id}
-              tx={tx}
-              isDeleting={deletingId === tx.id && pending}
-              onEdit={() => setEditTarget(tx)}
-              onDelete={() => handleDelete(tx.id)}
-            />
-          ))}
+          {combined.map((entry) =>
+            entry.kind === 'tx' ? (
+              <TransactionItem
+                key={`tx-${entry.item.id}`}
+                tx={entry.item}
+                isDeleting={deletingId === entry.item.id && pending}
+                onEdit={() => setEditTarget(entry.item)}
+                onDelete={() => handleDelete(entry.item.id)}
+              />
+            ) : (
+              <CardPurchaseItem
+                key={`cp-${entry.item.id}`}
+                purchase={entry.item}
+                isDeleting={deletingId === entry.item.id && pending}
+                onDelete={() => handleCancelPurchase(entry.item.id)}
+              />
+            ),
+          )}
         </ul>
       )}
 
@@ -93,13 +123,6 @@ function TransactionItem({
   })
 
   const label = tx.descricao || tx.categories?.nome || (isReceita ? 'Receita' : 'Despesa')
-  const sub = [tx.categories?.nome, tx.envelopes?.nome, dateStr]
-    .filter((v, i) => {
-      if (i === 0 && tx.descricao && tx.categories?.nome) return true
-      if (i === 0 && !tx.descricao) return false
-      return Boolean(v)
-    })
-    .join(' · ')
 
   return (
     <li
@@ -173,6 +196,85 @@ function TransactionItem({
   )
 }
 
+function CardPurchaseItem({
+  purchase,
+  isDeleting,
+  onDelete,
+}: {
+  purchase: CardPurchaseRow
+  isDeleting: boolean
+  onDelete: () => void
+}) {
+  const dateStr = new Date(purchase.data_compra + 'T12:00:00').toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+  })
+
+  const firstInstallment = purchase.card_installments?.find((i) => i.numero === 1)
+  const faturaStr = firstInstallment
+    ? new Date(firstInstallment.competencia + 'T12:00:00').toLocaleDateString('pt-BR', {
+        month: 'short',
+      }).replace('.', '')
+    : null
+
+  const installmentInfo = purchase.parcelas > 1 ? `1/${purchase.parcelas}` : 'à vista'
+  const subParts = [
+    'Crédito',
+    purchase.cards?.nome,
+    installmentInfo,
+    faturaStr ? `fatura de ${faturaStr}` : null,
+    dateStr,
+  ]
+    .filter(Boolean)
+    .join(' · ')
+
+  const label = purchase.descricao || purchase.categories?.nome || 'Compra no crédito'
+
+  return (
+    <li
+      className={`flex items-center gap-3 rounded-xl bg-white px-3 py-3 shadow-sm ring-1 ring-purple-100 transition ${
+        isDeleting ? 'opacity-40' : ''
+      }`}
+    >
+      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-purple-100 text-lg">
+        {purchase.categories?.emoji ?? '💳'}
+      </span>
+
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-zinc-900">{label}</p>
+        <p className="truncate text-xs text-purple-500">{subParts}</p>
+      </div>
+
+      <div className="shrink-0 text-right">
+        <p className="text-sm font-bold text-zinc-500">-{brl(purchase.valor_total)}</p>
+      </div>
+
+      <div className="flex shrink-0 items-center">
+        <button
+          type="button"
+          onClick={onDelete}
+          disabled={isDeleting}
+          aria-label="Cancelar compra no crédito"
+          className="rounded-lg p-1.5 text-zinc-400 hover:bg-red-50 hover:text-red-500 disabled:opacity-40"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="size-4"
+          >
+            <polyline points="3 6 5 6 21 6" />
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2" />
+          </svg>
+        </button>
+      </div>
+    </li>
+  )
+}
+
 function TransactionEditSheet({
   tx,
   envelopes,
@@ -193,7 +295,7 @@ function TransactionEditSheet({
   const [formaPgto, setFormaPgto] = useState(tx.forma_pgto ?? '')
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
-  // Fecha ao pressionar Escape
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
     document.addEventListener('keydown', handler)

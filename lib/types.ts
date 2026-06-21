@@ -94,6 +94,34 @@ export type CardWithStats = Card & {
   limite_usado: number
 }
 
+export type CardInstallmentDetail = {
+  id: string
+  card_id: string
+  purchase_id: string
+  numero: number
+  valor: number
+  competencia: string
+  status: 'em_aberto' | 'paga'
+  card_purchases: {
+    descricao: string | null
+    parcelas: number
+  } | null
+}
+
+export type CardPurchaseRow = {
+  id: string
+  card_id: string
+  descricao: string | null
+  category_id: string | null
+  valor_total: number
+  parcelas: number
+  data_compra: string
+  created_at: string
+  cards: { nome: string; cor: string | null } | null
+  categories: { nome: string; emoji: string | null } | null
+  card_installments: Array<{ numero: number; competencia: string }> | null
+}
+
 export type TransactionRow = {
   id: string
   data: string

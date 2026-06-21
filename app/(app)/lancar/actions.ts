@@ -5,6 +5,83 @@ import { revalidatePath } from 'next/cache'
 
 export type ActionResult = { ok: true } | { ok: false; error: string }
 
+export type CompraResult =
+  | { ok: true; cardNome: string; parcelas: number; valorParcela: number }
+  | { ok: false; error: string }
+
+export async function registrarCompraCartao(formData: FormData): Promise<CompraResult> {
+  const card_id = (formData.get('card_id') as string | null) || null
+  const descricao = (formData.get('descricao') as string | null)?.trim() || null
+  const category_id = (formData.get('category_id') as string | null) || null
+  const valorRaw = (formData.get('valor') as string | null)?.replace(',', '.') ?? ''
+  const valor_total = Number(valorRaw)
+  const parcelas = Number(formData.get('parcelas') ?? 1)
+  const data_compra = (formData.get('data') as string | null) || new Date().toISOString().slice(0, 10)
+  const competencia_inicial = (formData.get('competencia_inicial') as string | null) || null
+
+  if (!card_id) return { ok: false, error: 'Selecione um cartão.' }
+  if (isNaN(valor_total) || valor_total <= 0) return { ok: false, error: 'Valor inválido.' }
+  if (!competencia_inicial) return { ok: false, error: 'Selecione o mês da 1ª parcela.' }
+  if (!Number.isInteger(parcelas) || parcelas < 1) return { ok: false, error: 'Número de parcelas inválido.' }
+
+  const supabase = await createClient()
+  const { data: card } = await supabase.from('cards').select('nome').eq('id', card_id).single()
+
+  const { error } = await supabase.rpc('registrar_compra_cartao', {
+    p_card_id: card_id,
+    p_descricao: descricao,
+    p_category_id: category_id,
+    p_valor_total: valor_total,
+    p_parcelas: parcelas,
+    p_data_compra: data_compra,
+    p_competencia_inicial: competencia_inicial,
+  })
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/lancar')
+  revalidatePath('/painel')
+  revalidatePath('/cartoes')
+  const valorParcela = Math.round((valor_total / parcelas) * 100) / 100
+  return { ok: true, cardNome: card?.nome ?? 'cartão', parcelas, valorParcela }
+}
+
+export async function cancelarCompraCartao(id: string): Promise<ActionResult> {
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('cancelar_compra_cartao', { p_purchase_id: id })
+  if (error) return { ok: false, error: error.message }
+  revalidatePath('/lancar')
+  revalidatePath('/painel')
+  revalidatePath('/cartoes')
+  return { ok: true }
+}
+
+export type CriarCategoriaResult =
+  | { ok: true; category: import('@/lib/types').Category }
+  | { ok: false; error: string }
+
+export async function criarCategoria(
+  nome: string,
+  emoji: string | null,
+  tipo: 'receita' | 'despesa',
+): Promise<CriarCategoriaResult> {
+  const nome_trim = nome.trim()
+  if (!nome_trim) return { ok: false, error: 'Nome é obrigatório.' }
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('categories')
+    .insert({ nome: nome_trim, emoji: emoji || null, tipo })
+    .select('id, nome, emoji, tipo, envelope_padrao_id, created_at')
+    .single()
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/lancar')
+  revalidatePath('/plano')
+  return { ok: true, category: data as import('@/lib/types').Category }
+}
+
 export async function lancarTransacao(formData: FormData): Promise<ActionResult> {
   const tipo = formData.get('tipo') as 'receita' | 'despesa'
   const valorRaw = (formData.get('valor') as string | null)?.replace(',', '.') ?? ''

@@ -46,6 +46,39 @@ export async function saveCard(
   return { ok: true }
 }
 
+export type PagarFaturaResult =
+  | { ok: true; total: number; pago: number; rotativo: number; debt_id: string | null }
+  | { ok: false; error: string }
+
+export async function pagarFatura(
+  cardId: string,
+  competencia: string,
+  envelopeId: string,
+  valorPago: number,
+  data: string,
+): Promise<PagarFaturaResult> {
+  const supabase = await createClient()
+  const { data: result, error } = await supabase.rpc('pagar_fatura', {
+    p_card_id: cardId,
+    p_competencia: competencia,
+    p_envelope_id: envelopeId,
+    p_valor_pago: valorPago,
+    p_data: data,
+  })
+  if (error) return { ok: false, error: error.message }
+  const r = result as { total: unknown; pago: unknown; rotativo: unknown; debt_id: string | null }
+  revalidatePath('/cartoes')
+  revalidatePath('/painel')
+  revalidatePath('/dividas')
+  return {
+    ok: true,
+    total: Number(r.total),
+    pago: Number(r.pago),
+    rotativo: Number(r.rotativo),
+    debt_id: r.debt_id ?? null,
+  }
+}
+
 export async function inativarCard(id: string): Promise<SaveResult> {
   const supabase = await createClient()
   const { error } = await supabase.from('cards').update({ ativo: false }).eq('id', id)
