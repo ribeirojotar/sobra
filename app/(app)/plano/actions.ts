@@ -190,6 +190,12 @@ export async function exportarDados(): Promise<
     { data: income_sources, error: e4 },
     { data: recurring_expenses, error: e5 },
     { data: titulares, error: e6 },
+    { data: categories, error: e7 },
+    { data: distribution_rules, error: e8 },
+    { data: debt_negotiations, error: e9 },
+    { data: cards, error: e10 },
+    { data: card_purchases, error: e11 },
+    { data: card_installments, error: e12 },
   ] = await Promise.all([
     supabase.from('envelopes').select('*').order('ordem'),
     supabase.from('debts').select('*').order('ordem'),
@@ -197,9 +203,15 @@ export async function exportarDados(): Promise<
     supabase.from('income_sources').select('*').order('created_at'),
     supabase.from('recurring_expenses').select('*').order('created_at'),
     supabase.from('titulares').select('*').order('nome'),
+    supabase.from('categories').select('*').order('nome'),
+    supabase.from('distribution_rules').select('*'),
+    supabase.from('debt_negotiations').select('*').order('created_at'),
+    supabase.from('cards').select('*').order('ordem'),
+    supabase.from('card_purchases').select('*').order('created_at', { ascending: false }),
+    supabase.from('card_installments').select('*').order('competencia').order('created_at'),
   ])
 
-  const err = e1 ?? e2 ?? e3 ?? e4 ?? e5 ?? e6
+  const err = e1 ?? e2 ?? e3 ?? e4 ?? e5 ?? e6 ?? e7 ?? e8 ?? e9 ?? e10 ?? e11 ?? e12
   if (err) return { ok: false, error: err.message }
 
   return {
@@ -208,10 +220,16 @@ export async function exportarDados(): Promise<
       exportedAt: new Date().toISOString(),
       envelopes,
       titulares,
+      categories,
+      distribution_rules,
       debts,
+      debt_negotiations,
       income_sources,
       recurring_expenses,
       transactions,
+      cards,
+      card_purchases,
+      card_installments,
     },
   }
 }

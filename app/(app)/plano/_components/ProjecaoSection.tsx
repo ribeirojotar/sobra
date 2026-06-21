@@ -7,6 +7,7 @@ type Props = {
   rendas: IncomeSource[]
   fixas: RecurringExpense[]
   debts: DebtMin[]
+  parcelasPorMes: Record<string, number>
 }
 
 function nomeMes(d: Date): string {
@@ -19,7 +20,7 @@ function addMonths(d: Date, n: number): Date {
   return r
 }
 
-export function ProjecaoSection({ rendas, fixas, debts }: Props) {
+export function ProjecaoSection({ rendas, fixas, debts, parcelasPorMes }: Props) {
   const rendasAtivas = rendas.filter((r) => r.ativo)
   const fixasAtivas = fixas.filter((f) => f.ativo)
   const semDados = rendasAtivas.length === 0 && fixasAtivas.length === 0
@@ -62,7 +63,10 @@ export function ProjecaoSection({ rendas, fixas, debts }: Props) {
           {/* Cards por mês */}
           <div className="flex flex-col gap-3">
             {meses.map((mes, i) => {
-              const positivo = netMensal >= 0
+              const mesKey = `${mes.getFullYear()}-${String(mes.getMonth() + 1).padStart(2, '0')}`
+              const parcelasCartao = parcelasPorMes[mesKey] ?? 0
+              const netMes = netMensal - parcelasCartao
+              const positivo = netMes >= 0
               return (
                 <div
                   key={i}
@@ -73,13 +77,19 @@ export function ProjecaoSection({ rendas, fixas, debts }: Props) {
                       {nomeMes(mes)}
                     </span>
                     <span className={`text-base font-bold ${positivo ? 'text-green-700' : 'text-red-600'}`}>
-                      {positivo ? '+' : ''}{brl(netMensal)}
+                      {positivo ? '+' : ''}{brl(netMes)}
                     </span>
                   </div>
                   <div className="mt-2 flex justify-between text-xs text-zinc-500">
                     <span>Entradas: {brl(entradas)}</span>
-                    <span>Saídas: {brl(totalSaidas)}</span>
+                    <span>Saídas: {brl(totalSaidas + parcelasCartao)}</span>
                   </div>
+                  {parcelasCartao > 0 && (
+                    <div className="mt-1 flex justify-between text-[11px] text-zinc-400">
+                      <span>· Fixas + dívidas: {brl(totalSaidas)}</span>
+                      <span>· Cartão: {brl(parcelasCartao)}</span>
+                    </div>
+                  )}
                   {!positivo && (
                     <p className="mt-2 text-xs font-medium text-red-600">
                       ⚠️ Mês negativo — revise as rendas ou reduza gastos fixos.
@@ -93,6 +103,7 @@ export function ProjecaoSection({ rendas, fixas, debts }: Props) {
           <p className="mt-3 text-[11px] text-zinc-400 leading-relaxed">
             Projeção simplificada: rendas fixas + estimativa de variáveis, sem considerar gastos do dia a dia.
             {parcelasMin > 0 && ` Inclui ${brl(parcelasMin)}/mês de parcelas mínimas das dívidas.`}
+            {' Parcelas de cartão são descontadas pelo mês de competência de cada parcela.'}
           </p>
         </>
       )}
