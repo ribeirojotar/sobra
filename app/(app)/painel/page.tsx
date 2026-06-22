@@ -324,7 +324,7 @@ export default async function PainelPage({
   const totalFaturaAberta = Object.values(faturaAbertaPorCartao).reduce((s, v) => s + v, 0)
 
   const disponivel = saldoLivre - faturasComprometidas
-  const faturaSemCaixa = faturasComprometidas > saldoLivre
+  const faturaSemCaixa = faturasComprometidas > 0 && faturasComprometidas > saldoLivre
 
   // Próximo vencimento e alertas de cartão
   const alertasCartao: AlertaCartao[] = []
