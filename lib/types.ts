@@ -132,6 +132,8 @@ export type TransactionRow = {
   debt_id: string | null
   descricao: string | null
   forma_pgto: string | null
+  status: 'efetivada' | 'pendente'
+  data_vencimento: string | null
   created_at: string
   categories: { nome: string; emoji: string | null } | null
   envelopes: { nome: string } | null

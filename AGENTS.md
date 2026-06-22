@@ -37,3 +37,4 @@ Next.js (App Router, TypeScript) · Supabase (Postgres + Auth + RLS) · Tailwind
 - Dívidas/Simulador: mensagem "Não quita (>50 anos)" terminar com "— aumente o aporte ou negocie a dívida" (acionável).
 - Plano/Export: incluir categorias, distribution_rules e debt_negotiations no JSON pra backup completo.
 Módulo Cartão: ver PRD-sobra-adendo-cartao.md (modelo pragmático, aba própria)." Assim o agente constrói a UI já alinhado.
+"Status pendente/efetivada + visão do mês: ver PRD-sobra-adendo-status.md (v1.2)."

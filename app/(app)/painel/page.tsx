@@ -14,6 +14,7 @@ import { FaturasCard } from './_components/FaturasCard'
 import type { ProximoVencimento } from './_components/FaturasCard'
 import { ParaOndeCard } from './_components/ParaOndeCard'
 import type { CatRow } from './_components/ParaOndeCard'
+import { MonthPicker } from '../_components/MonthPicker'
 
 export const metadata: Metadata = { title: 'Painel — Sobra' }
 
@@ -79,16 +80,32 @@ type CardRow = {
   cor: string | null
 }
 
-export default async function PainelPage() {
+function parseMes(raw: string | string[] | undefined): string {
+  const val = Array.isArray(raw) ? raw[0] : raw
+  if (val && /^\d{4}-\d{2}$/.test(val)) return val
+  const n = new Date()
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}`
+}
+
+export default async function PainelPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mes?: string | string[] }>
+}) {
   const supabase = await createClient()
 
   const now = new Date()
-  const mesAtual = isoMonthStr(now)
-  const mesAnterior = isoMonthStr(subMonths(now, 1))
-  const mesAtualFirstStr = startOfMonthIso(now)
-  const nextMonthFirstStr = startOfMonthIso(new Date(now.getFullYear(), now.getMonth() + 1, 1))
-  const inicio4Meses = startOfMonthIso(subMonths(now, 3))
-  const inicio6Meses = startOfMonthIso(subMonths(now, 6))
+  const { mes: mesParam } = await searchParams
+  const mes = parseMes(mesParam)
+  const [sy, sm] = mes.split('-').map(Number)
+  const selectedDate = new Date(sy, sm - 1, 1)
+
+  const mesAtual = isoMonthStr(selectedDate)
+  const mesAnterior = isoMonthStr(subMonths(selectedDate, 1))
+  const mesAtualFirstStr = startOfMonthIso(selectedDate)
+  const nextMonthFirstStr = startOfMonthIso(new Date(sy, sm, 1))
+  const inicio4Meses = startOfMonthIso(subMonths(selectedDate, 3))
+  const inicio6Meses = startOfMonthIso(subMonths(selectedDate, 6))
 
   const [
     { data: envelopes },
@@ -286,8 +303,8 @@ export default async function PainelPage() {
     healthScore = Math.min(100, pctPts + livrePts + acumPts)
   }
 
-  const nomeMesAtual = MESES[now.getMonth()]
-  const nomeMesAnterior = MESES[subMonths(now, 1).getMonth()]
+  const nomeMesAtual = MESES[selectedDate.getMonth()]
+  const nomeMesAnterior = MESES[subMonths(selectedDate, 1).getMonth()]
 
   return (
     <main className="flex flex-col gap-5 px-4 pb-6 pt-6">
@@ -309,6 +326,9 @@ export default async function PainelPage() {
           </button>
         </form>
       </div>
+
+      {/* Seletor de mês */}
+      <MonthPicker mes={mes} />
 
       {/* Alertas */}
       <AlertasFaixa

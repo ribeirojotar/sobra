@@ -71,6 +71,9 @@ export function LancarForm({ envelopes, categories, rules, cards }: Props) {
   const [newCatNome, setNewCatNome] = useState('')
   const [newCatEmoji, setNewCatEmoji] = useState('')
   const [catPending, startCatTransition] = useTransition()
+  // Status pendente/efetivada
+  const [statusLancamento, setStatusLancamento] = useState<'efetivada' | 'pendente'>('efetivada')
+  const [dataVencimento, setDataVencimento] = useState('')
   // Form state
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -108,6 +111,8 @@ export function LancarForm({ envelopes, categories, rules, cards }: Props) {
     setCreatingCat(false)
     setNewCatNome('')
     setNewCatEmoji('')
+    setStatusLancamento('efetivada')
+    setDataVencimento('')
     setError(null)
   }
 
@@ -157,6 +162,10 @@ export function LancarForm({ envelopes, categories, rules, cards }: Props) {
     } else {
       if (!distribuir && !envelopeId) { setError('Selecione uma caixinha.'); return }
       if (distribuir && !ruleId) { setError('Selecione uma regra de distribuição.'); return }
+      if (statusLancamento === 'pendente' && !dataVencimento) {
+        setError('Informe a data de vencimento.')
+        return
+      }
     }
 
     const fd = new FormData()
@@ -188,6 +197,8 @@ export function LancarForm({ envelopes, categories, rules, cards }: Props) {
           result = await distribuirReceita(fd)
         } else {
           fd.set('envelope_id', envelopeId!)
+          fd.set('status', statusLancamento)
+          if (statusLancamento === 'pendente') fd.set('data_vencimento', dataVencimento)
           result = await lancarTransacao(fd)
         }
         if (!result.ok) { setError(result.error); return }
@@ -259,6 +270,43 @@ export function LancarForm({ envelopes, categories, rules, cards }: Props) {
             className="w-full rounded-xl border border-zinc-200 px-3 py-2.5 text-sm outline-none placeholder:text-zinc-400 transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
           />
         </div>
+
+        {/* Toggle Efetivada / Pendente (oculto para crédito) */}
+        {!isCredito && (
+          <div className="mb-3">
+            <div className="flex rounded-xl bg-zinc-100 p-1">
+              {(['efetivada', 'pendente'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => { setStatusLancamento(s); if (s === 'efetivada') setDataVencimento('') }}
+                  className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition ${
+                    statusLancamento === s
+                      ? s === 'efetivada'
+                        ? 'bg-white shadow text-zinc-800'
+                        : 'bg-white shadow text-amber-600'
+                      : 'text-zinc-500'
+                  }`}
+                >
+                  {s === 'efetivada' ? 'Efetivada' : 'Pendente'}
+                </button>
+              ))}
+            </div>
+            {statusLancamento === 'pendente' && (
+              <div className="mt-2">
+                <label className="mb-1 block text-xs font-medium text-amber-600">
+                  Data de vencimento *
+                </label>
+                <input
+                  type="date"
+                  value={dataVencimento}
+                  onChange={(e) => setDataVencimento(e.target.value)}
+                  className="w-full rounded-xl border border-amber-300 bg-amber-50 px-3 py-2.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-400/20"
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Chips de categoria + "+ Nova" */}
         <div className="mb-3">

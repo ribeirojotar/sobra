@@ -92,9 +92,12 @@ export async function lancarTransacao(formData: FormData): Promise<ActionResult>
   const descricao = (formData.get('descricao') as string | null)?.trim() || null
   const forma_pgto = (formData.get('forma_pgto') as string | null) || null
   const debt_id = (formData.get('debt_id') as string | null) || null
+  const status = (formData.get('status') as string | null) || 'efetivada'
+  const data_vencimento = (formData.get('data_vencimento') as string | null) || null
 
   if (!tipo || isNaN(valor) || valor <= 0) return { ok: false, error: 'Valor inválido.' }
   if (!envelope_id) return { ok: false, error: 'Selecione uma caixinha.' }
+  if (status === 'pendente' && !data_vencimento) return { ok: false, error: 'Informe a data de vencimento.' }
 
   const supabase = await createClient()
   const { error } = await supabase.rpc('registrar_lancamento', {
@@ -106,6 +109,31 @@ export async function lancarTransacao(formData: FormData): Promise<ActionResult>
     p_descricao: descricao,
     p_forma_pgto: forma_pgto,
     p_debt_id: debt_id,
+    p_status: status,
+    p_data_vencimento: status === 'pendente' ? data_vencimento : null,
+  })
+
+  if (error) return { ok: false, error: error.message }
+
+  revalidatePath('/lancar')
+  revalidatePath('/painel')
+  return { ok: true }
+}
+
+export async function quitarPendencia(
+  transaction_id: string,
+  envelope_id: string,
+  data_efetiva: string,
+): Promise<ActionResult> {
+  if (!transaction_id || !envelope_id || !data_efetiva) {
+    return { ok: false, error: 'Dados incompletos.' }
+  }
+
+  const supabase = await createClient()
+  const { error } = await supabase.rpc('quitar_pendencia', {
+    p_transaction_id: transaction_id,
+    p_envelope_id: envelope_id,
+    p_data_efetiva: data_efetiva,
   })
 
   if (error) return { ok: false, error: error.message }
