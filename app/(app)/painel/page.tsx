@@ -4,7 +4,10 @@ import { createClient } from '@/lib/supabase/server'
 import { signOut } from '@/app/login/actions'
 import { simular } from '@/lib/simulador'
 import type { Debt } from '@/lib/types'
+import { HeroTrio } from './_components/HeroTrio'
 import { HeroDisponivel } from './_components/HeroDisponivel'
+import { DiscriminacaoMes } from './_components/DiscriminacaoMes'
+import { AlertasPendentes } from './_components/AlertasPendentes'
 import { MissaoQuitacao } from './_components/MissaoQuitacao'
 import { MedidorSaude } from './_components/MedidorSaude'
 import { AlertasFaixa } from './_components/AlertasFaixa'
@@ -55,10 +58,19 @@ type TxRow = {
   valor: number
   tipo: string
   data: string
+  status: string
+  data_vencimento: string | null
   category_id: string | null
   debt_id: string | null
   forma_pgto: string | null
   categories: { nome: string; emoji: string | null } | null
+}
+
+type PendenteTxRow = {
+  valor: number
+  tipo: string
+  data_vencimento: string | null
+  forma_pgto: string | null
 }
 
 type CardPurchaseRow = {
@@ -107,11 +119,16 @@ export default async function PainelPage({
   const inicio4Meses = startOfMonthIso(subMonths(selectedDate, 3))
   const inicio6Meses = startOfMonthIso(subMonths(selectedDate, 6))
 
+  const todayIso = now.toISOString().slice(0, 10)
+  const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
+  const sevenDaysIso = sevenDaysLater.toISOString().slice(0, 10)
+
   const [
     { data: envelopes },
     { data: debts },
     { data: pagamentosDebts },
     { data: rawTransacoes },
+    { data: rawPendentes },
     { data: rawInstallments },
     { data: rawCards },
     { data: rawCardPurchases },
@@ -122,11 +139,19 @@ export default async function PainelPage({
       .from('transactions')
       .select('valor, data')
       .eq('tipo', 'despesa')
+      .eq('status', 'efetivada')
       .not('debt_id', 'is', null),
     supabase
       .from('transactions')
-      .select('valor, tipo, data, category_id, debt_id, forma_pgto, categories(nome, emoji)')
+      .select('valor, tipo, data, status, data_vencimento, category_id, debt_id, forma_pgto, categories(nome, emoji)')
+      .eq('status', 'efetivada')
       .gte('data', inicio4Meses),
+    supabase
+      .from('transactions')
+      .select('valor, tipo, data_vencimento, forma_pgto')
+      .eq('status', 'pendente')
+      .gte('data_vencimento', mesAtualFirstStr)
+      .lt('data_vencimento', nextMonthFirstStr),
     supabase
       .from('card_installments')
       .select('card_id, valor, competencia')
@@ -143,6 +168,11 @@ export default async function PainelPage({
   const envs = envelopes ?? []
   const livre = envs.find((e) => e.tipo === 'livre')
   const saldoLivre = Number(livre?.saldo ?? 0)
+
+  // Saldo atual: todas as caixinhas ativas exceto negócio
+  const saldoAtual = envs
+    .filter((e) => e.tipo !== 'negocio')
+    .reduce((s, e) => s + Number(e.saldo), 0)
 
   // --- Dívidas ---
   const dvds = (debts ?? []) as Debt[]
@@ -172,10 +202,55 @@ export default async function PainelPage({
       ? simular(dvds, aporteEstimado, 'avalanche')
       : null
 
-  // --- Transações do período ---
+  // --- Transações efetivadas do período ---
   const txAll = (rawTransacoes ?? []) as unknown as TxRow[]
 
-  // Gastos variáveis (sem debt_id) — para alerta gastoAcimaMedia
+  // --- Herói trio: Inicial / Atual / Previsto ---
+  const receitasEfetivadas = txAll
+    .filter((t) => t.tipo === 'receita' && t.data.startsWith(mesAtual))
+    .reduce((s, t) => s + Number(t.valor), 0)
+  const despesasEfetivadas = txAll
+    .filter((t) => t.tipo === 'despesa' && t.data.startsWith(mesAtual))
+    .reduce((s, t) => s + Number(t.valor), 0)
+  const saldoInicial = saldoAtual - (receitasEfetivadas - despesasEfetivadas)
+
+  const pendentes = (rawPendentes ?? []) as PendenteTxRow[]
+  const receitasPendentes = pendentes
+    .filter((t) => t.tipo === 'receita' && t.forma_pgto !== 'Fatura')
+    .reduce((s, t) => s + Number(t.valor), 0)
+  const despesasPendentes = pendentes
+    .filter((t) => t.tipo === 'despesa' && t.forma_pgto !== 'Fatura')
+    .reduce((s, t) => s + Number(t.valor), 0)
+  const saldoPrevisto = saldoAtual + receitasPendentes - despesasPendentes
+
+  // --- 4 baldes de discriminação (despesas, sem fatura de cartão) ---
+  const despPendentes = pendentes.filter(
+    (t) => t.tipo === 'despesa' && t.forma_pgto !== 'Fatura' && t.data_vencimento,
+  )
+  const baldeEfetivadas = txAll
+    .filter(
+      (t) =>
+        t.tipo === 'despesa' &&
+        t.data.startsWith(mesAtual) &&
+        t.forma_pgto !== 'Fatura',
+    )
+    .reduce((s, t) => s + Number(t.valor), 0)
+  const baldeProximo = despPendentes
+    .filter((t) => t.data_vencimento! >= todayIso && t.data_vencimento! <= sevenDaysIso)
+    .reduce((s, t) => s + Number(t.valor), 0)
+  const baldeVencidas = despPendentes
+    .filter((t) => t.data_vencimento! < todayIso)
+    .reduce((s, t) => s + Number(t.valor), 0)
+  const baldeDistantes = despPendentes
+    .filter((t) => t.data_vencimento! > sevenDaysIso)
+    .reduce((s, t) => s + Number(t.valor), 0)
+
+  // Sanity check — imprime no terminal do Next.js
+  console.log(
+    `[painel sanity] mes=${mesAtual} | inicial=${saldoInicial.toFixed(2)} atual=${saldoAtual.toFixed(2)} previsto=${saldoPrevisto.toFixed(2)} | baldes: efetivadas=${baldeEfetivadas.toFixed(2)} proximo=${baldeProximo.toFixed(2)} vencidas=${baldeVencidas.toFixed(2)} distantes=${baldeDistantes.toFixed(2)}`,
+  )
+
+  // --- Gastos variáveis (para alerta gastoAcimaMedia, só efetivadas sem debt_id) ---
   const gastosVar = txAll.filter((t) => t.tipo === 'despesa' && t.debt_id == null)
   const gastoMesAtual = gastosVar
     .filter((t) => t.data.startsWith(mesAtual))
@@ -193,7 +268,7 @@ export default async function PainelPage({
       : 0
   const gastoAcimaMedia = mediaGastosPrev > 0 && gastoMesAtual > mediaGastosPrev * 1.15
 
-  // --- Resumo do mês ---
+  // --- Resumo do mês (só efetivadas, já filtrado via rawTransacoes) ---
   const receitasMesAtual = txAll
     .filter((t) => t.tipo === 'receita' && t.data.startsWith(mesAtual))
     .reduce((s, t) => s + Number(t.valor), 0)
@@ -208,7 +283,6 @@ export default async function PainelPage({
     .reduce((s, t) => s + Number(t.valor), 0)
 
   // --- Top 5 categorias do mês ---
-  // Despesas à vista (exclui pagamentos de fatura para não contar em dobro)
   const catMap: Record<string, CatRow & { key: string }> = {}
   for (const t of txAll.filter(
     (t) => t.tipo === 'despesa' && t.data.startsWith(mesAtual) && t.forma_pgto !== 'Fatura',
@@ -219,7 +293,6 @@ export default async function PainelPage({
     }
     catMap[key].total += Number(t.valor)
   }
-  // Compras no crédito do mês pelo data_compra (valor real do gasto, independente de quando a fatura é paga)
   const cardPurchases = (rawCardPurchases ?? []) as unknown as CardPurchaseRow[]
   for (const p of cardPurchases) {
     const key = p.category_id ?? '__sem_categoria'
@@ -237,12 +310,10 @@ export default async function PainelPage({
   const installs = (rawInstallments ?? []) as unknown as InstallRow[]
   const cards = (rawCards ?? []) as unknown as CardRow[]
 
-  // Faturas comprometidas: mês atual + próximo (para o herói)
   const faturasComprometidas = installs
     .filter((i) => i.competencia <= nextMonthFirstStr)
     .reduce((s, i) => s + Number(i.valor), 0)
 
-  // Fatura aberta por cartão: só mês atual (para o card Faturas)
   const faturaAbertaPorCartao: Record<string, number> = {}
   for (const inst of installs) {
     if (inst.competencia <= mesAtualFirstStr) {
@@ -252,7 +323,6 @@ export default async function PainelPage({
   }
   const totalFaturaAberta = Object.values(faturaAbertaPorCartao).reduce((s, v) => s + v, 0)
 
-  // Disponível (herói)
   const disponivel = saldoLivre - faturasComprometidas
   const faturaSemCaixa = faturasComprometidas > saldoLivre
 
@@ -330,7 +400,35 @@ export default async function PainelPage({
       {/* Seletor de mês */}
       <MonthPicker mes={mes} />
 
-      {/* Alertas */}
+      {/* Herói trio: Inicial / Atual / Previsto */}
+      <HeroTrio
+        inicial={saldoInicial}
+        atual={saldoAtual}
+        previsto={saldoPrevisto}
+        receitasPendentes={receitasPendentes}
+        despesasPendentes={despesasPendentes}
+      />
+
+      {/* Disponível pra gastar */}
+      <HeroDisponivel saldoLivre={saldoLivre} faturasComprometidas={faturasComprometidas} />
+
+      {/* Discriminação do mês */}
+      <DiscriminacaoMes
+        mes={mes}
+        efetivadas={baldeEfetivadas}
+        proximoVencimento={baldeProximo}
+        vencidas={baldeVencidas}
+        distantes={baldeDistantes}
+      />
+
+      {/* Alertas de pendências */}
+      <AlertasPendentes
+        vencidas={baldeVencidas}
+        proximosSete={baldeProximo}
+        saldoAtual={saldoAtual}
+      />
+
+      {/* Alertas gerais */}
       <AlertasFaixa
         desenrolaAtiva={desenrolaAtiva}
         dividasElegiveis={dividasElegiveis}
@@ -344,9 +442,6 @@ export default async function PainelPage({
         faturasComprometidas={faturasComprometidas}
         saldoLivre={saldoLivre}
       />
-
-      {/* Herói */}
-      <HeroDisponivel saldoLivre={saldoLivre} faturasComprometidas={faturasComprometidas} />
 
       {/* Resumo do mês */}
       <ResumoMes
